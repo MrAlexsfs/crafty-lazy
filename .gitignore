@@ -1,0 +1,10 @@
+/book.bin
+/crafty
+/crafty.o
+/*.profdata
+/*.profraw
+/game.*
+/log.*
+/prof/
+/*.tmp
+/runprof

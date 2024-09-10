@@ -59,8 +59,8 @@
 #                  Makefile so if you do NOT have hardware popcnt, remove all
 #                  of the -mpopcnt strings in the Makefile lines below.
 #
-default:
-	$(MAKE) -j unix-clang
+all:
+	$(MAKE) -j quick
 help:
 	@echo "You must specify the system which you want to compile for:"
 	@echo ""
@@ -100,7 +100,7 @@ unix-gcc-profile:
 		crafty-make
 
 unix-clang:
-	@/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/llvm-profdata merge -output=crafty.profdata *.profraw
+	@/usr/local/opt/llvm/bin/llvm-profdata merge -output=crafty.profdata *.profraw
 	$(MAKE) -j target=UNIX \
 		CC=clang \
 		opt='-DSYZYGY -DTEST -DCPUS=4' \
