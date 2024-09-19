@@ -43,7 +43,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
     return 0;
   }
 #endif
-  if (tree->thread_id == 0) {
+  if (tree->thread_id == 0) {           //Should we keep this as is, or make each thread check their own inpu/timeout?
     if (--next_time_check <= 0) {
       next_time_check = nodes_between_time_checks;
       if (TimeCheck(tree, 1)) {
@@ -403,14 +403,10 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  *                                                          *
  ************************************************************
  */
+    // Removed parallel check
   tree->next_status[ply].phase = HASH;
-  if (mode == parallel) {
-    current = tree->parent;
-    t_beta = alpha + 1;
-  } else {
     current = tree;
     t_beta = beta;
-  }
 /*
  ************************************************************
  *                                                          *
@@ -429,18 +425,13 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  *                                                          *
  ************************************************************
  */
+    //Removed parallel checks
   while (1) {
     if (ply == 1 && moves_done == 1 && alpha == original_alpha &&
         mode == serial)
       break;
-    if (mode == parallel)
-      Lock(current->lock);
     order = (ply > 1) ? NextMove(current, ply, depth, wtm, in_check)
         : NextRootMove(current, tree, wtm);
-    if (mode == parallel) {
-      tree->curmv[ply] = current->curmv[ply];
-      Unlock(current->lock);
-    }
     if (!order)
       break;
 #if defined(TRACE)
@@ -603,8 +594,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
           search_result = IN_WINDOW;
           if (value >= beta)
             search_result = FAIL_HIGH;
-          if (mode == parallel && ply == 1)
-            search_result = FAIL_HIGH;
+          //Removed parallel check
         }
       } while (0);
     UnmakeMove(tree, ply, wtm, tree->curmv[ply]);
@@ -649,23 +639,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
           tree->pv[0] = tree->pv[1];
         }
       }
-#if (CPUS > 1)
-      if (mode == parallel) {
-        Lock(lock_smp);
-        Lock(tree->parent->lock);
-        if (!tree->stop) {
-          int proc;
-
-          parallel_aborts++;
-          for (proc = 0; proc < smp_max_threads; proc++)
-            if (tree->parent->siblings[proc] && proc != tree->thread_id)
-              ThreadStop(tree->parent->siblings[proc]);
-        }
-        Unlock(tree->parent->lock);
-        Unlock(lock_smp);
-        return beta;
-      }
-#endif
+    //Removed parallel check
       tree->fail_highs++;
       if (order == 1)
         tree->fail_high_first_move++;
@@ -829,35 +803,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  *                                                          *
  ************************************************************
  */
-#if (CPUS > 1)
-    if (mode == serial && moves_done && smp_threads &&
-        ThreadSplit(tree, ply, depth, alpha, original_alpha, moves_done))
-      do {
-        tree->alpha = alpha;
-        tree->beta = beta;
-        tree->value = alpha;
-        tree->wtm = wtm;
-        tree->ply = ply;
-        tree->depth = depth;
-        tree->in_check = in_check;
-        tree->searched = searched;
-        if (Split(tree)) {
-          if (abort_search || tree->stop)
-            return 0;
-          value = tree->value;
-          if (value > alpha) {
-            if (ply == 1)
-              tree->pv[0] = tree->pv[1];
-            if (value >= beta) {
-              HashStore(tree, ply, depth, wtm, LOWER, value, tree->cutmove);
-              return value;
-            }
-            alpha = value;
-            break;
-          }
-        }
-      } while (0);
-#endif
+    //Removed parallel check
   }
 /*
  ************************************************************
@@ -875,7 +821,8 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  *                                                          *
  ************************************************************
  */
-  if (abort_search || tree->stop || mode == parallel)
+    //Removed parallel check
+  if (abort_search || tree->stop)
     return alpha;
 /*
  ************************************************************

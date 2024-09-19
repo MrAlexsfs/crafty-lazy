@@ -338,7 +338,7 @@ int Iterate(int wtm, int search_type, int root_list_done) {
           root_moves[i].status &= 4;
         }
         while (1) {
-          if (smp_max_threads > 1)
+          if (smp_max_threads > 1)      //Should probably prepare the threads here...
             smp_split = 1;
           rep_index--;
           value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0);
