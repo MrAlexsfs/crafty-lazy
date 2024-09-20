@@ -232,7 +232,7 @@ int Iterate(int wtm, int search_type, int root_list_done) {
         for (proc = smp_threads + 1; proc < smp_max_threads; proc++) {
           Print(32, " %d", proc);
 #  if defined(UNIX)
-          pthread_create(&pt, &attributes, ThreadInit, (void *) proc);
+          pthread_create(&pt, &attributes, ThreadInit, (void *) proc);  //Maybe create a new function in thread.c that is passed instead of ThreadInit
 #  else
           NumaStartThread(ThreadInit, (void *) proc);
 #  endif

@@ -164,6 +164,7 @@ extern TREE *block[MAX_BLOCKS + 1];
 extern THREAD thread[CPUS];
 #if (CPUS > 1)
 extern lock_t lock_smp, lock_io;
+extern pthread_barrier_t barrier_lazy;
 #  if defined(UNIX)
 extern pthread_attr_t attributes;
 #  endif

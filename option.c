@@ -3430,6 +3430,8 @@ int Option(TREE * RESTRICT tree) {
     for (proc = 1; proc < CPUS; proc++)
       if (proc >= smp_max_threads)
         thread[proc].terminate = 1;
+    // Maybe initialise barrier here?
+    BarrierInit();
   } else if (OptionMatch("smpnice", *args)) {
     if (nargs < 2) {
       printf("usage:  smpnice 0|1\n");

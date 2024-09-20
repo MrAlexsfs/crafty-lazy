@@ -726,6 +726,32 @@ int ThreadWait(int tid, TREE * RESTRICT waiting) {
   }
 }
 
+/**
+ * The main waiting loop for Lazy SMP threads. A barrier is used to make sure all
+ *        threads have entered the function before the tree of the main thread is
+ *        copied to the helpers. A barrier is also used to make sure all threads
+ *        start the search at the same time, and then wait for the main thread to
+ *        complete the search.
+ * @param tid thread id of the thread that entered the function.
+ * @returns the value obtained by the main thread after completing a search.
+ * */
+int LazyThreadWait(int tid){
+    int search_value;
+    TREE *tree;
+    while(FOREVER){
+        pthread_barrier_wait(&barrier_lazy);
+        if (tid != 0)
+            CopyFromParent(thread[tid].tree);   //Doesn't work, replace with proper function!
+        tree = thread[tid].tree;
+        pthread_barrier_wait(&barrier_lazy);
+        search_value = Search(tree, 1, iteration, tree->wtm, tree->alpha,
+                              tree->beta, Check(tree->wtm), 0);
+        pthread_barrier_wait(&barrier_lazy);
+        if (tid == 0)
+            return search_value;
+    }
+}
+
 /* modified 08/03/16 */
 /*
  *******************************************************************************
@@ -970,6 +996,10 @@ TREE *GetBlock(TREE * RESTRICT parent, int tid) {
  */
 void WaitForAllThreadsInitialized(void) {
   while (initialized_threads < smp_max_threads); /* Do nothing */
+}
+
+void BarrierInit(void) {
+    pthread_barrier_init(&barrier_lazy, NULL, smp_max_threads);
 }
 
 #if !defined (UNIX)

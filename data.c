@@ -571,6 +571,7 @@ TREE *block[MAX_BLOCKS + 1];
 THREAD thread[CPUS];
 #if (CPUS > 1)
 lock_t lock_smp, lock_io;
+pthread_barrier_t barrier_lazy;
 #if defined(UNIX)
   pthread_attr_t attributes;
 #endif

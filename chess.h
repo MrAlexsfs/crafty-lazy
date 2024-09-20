@@ -26,6 +26,9 @@
 #  if (CPUS > 1)
 #    include <pthread.h>
 #  endif
+#  ifdef __APPLE__
+#    include "pthread_barrier.h"  // Custom pthread barrier for Macs
+#  endif
 #  include <unistd.h>
 #  include <sys/types.h>
 #  include <sys/stat.h>
@@ -514,6 +517,7 @@ int ValidMove(TREE *RESTRICT, int, int, int);
 int VerifyMove(TREE *RESTRICT, int, int, int);
 void ValidatePosition(TREE *RESTRICT, int, int, char *);
 void WaitForAllThreadsInitialized(void);
+void BarrierInit(void);
 #  if !defined(UNIX)
 extern void *WinMallocInterleaved(size_t, int);
 extern void WinFreeInterleaved(void *, size_t);
