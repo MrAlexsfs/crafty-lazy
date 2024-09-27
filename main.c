@@ -4665,6 +4665,9 @@ int main(int argc, char **argv) {
       display = tree->position;
       tree->status[1] = tree->status[0];
       value = Iterate(game_wtm, think, 0);
+#if defined(LAZY_DEBUG)
+        printf(" [main.c]\tBack from Iterate, value = %d\n", value);
+#endif
     }
 /*
  ************************************************************

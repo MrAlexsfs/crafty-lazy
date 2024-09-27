@@ -502,9 +502,13 @@ void *STDCALL ThreadInit(void *);
 void ThreadMalloc(int64_t);
 #  endif
 int ThreadSplit(TREE *RESTRICT, int, int, int, int, int);
+void ThreadStopAll();
 void ThreadStop(TREE *RESTRICT);
 void ThreadTrace(TREE * RESTRICT, int, int);
+void LazyWait(int, TREE *RESTRICT);
 int ThreadWait(int, TREE *RESTRICT);
+void StartHelpers(int, int, int);
+void CopyToHelpers(TREE *RESTRICT);
 int Threat(TREE *, int, int, int, int);
 void TimeAdjust(int, int);
 int TimeCheck(TREE *RESTRICT, int);
