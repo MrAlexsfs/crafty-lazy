@@ -388,7 +388,7 @@ int NextMove(TREE * RESTRICT tree, int ply, int depth, int side, int in_check) {
  *                                                                             *
  *******************************************************************************
  */
-int NextRootMove(TREE * RESTRICT tree, TREE * RESTRICT mytree, int side) {
+int NextRootMove(TREE * RESTRICT tree, TREE * RESTRICT mytree, int side, int tid) {
   uint64_t total_nodes;
   int which, i, t;
 
@@ -422,15 +422,15 @@ int NextRootMove(TREE * RESTRICT tree, TREE * RESTRICT mytree, int side) {
  ************************************************************
  */
   for (which = 0; which < n_root_moves; which++) {
-    if (!(root_moves[which].status & 8)) {
+    if (!(root_moves[tid * 256 + which].status & 8)) {
       if (search_move) {
-        if (root_moves[which].move != search_move) {
-          root_moves[which].status |= 8;
+        if (root_moves[tid * 256 + which].move != search_move) {
+          root_moves[tid * 256 + which].status |= 8;
           continue;
         }
       }
-      tree->curmv[1] = root_moves[which].move;
-      root_moves[which].status |= 8;
+      tree->curmv[1] = root_moves[tid * 256 + which].move;
+      root_moves[tid * 256 + which].status |= 8;
 /*
  ************************************************************
  *                                                          *
@@ -491,7 +491,7 @@ int NextRootMove(TREE * RESTRICT tree, TREE * RESTRICT mytree, int side) {
  *                                                          *
  ************************************************************
  */
-      if (root_moves[which].status & 4)
+      if (root_moves[tid * 256 + which].status & 4)
         tree->phase[1] = DO_NOT_REDUCE;
       else
         tree->phase[1] = REMAINING;
@@ -517,7 +517,7 @@ int NextRootMove(TREE * RESTRICT tree, TREE * RESTRICT mytree, int side) {
  *                                                                             *
  *******************************************************************************
  */
-int NextRootMoveParallel(void) {
+int NextRootMoveParallel(int tid) {
   int which;
 
 /*
@@ -542,9 +542,9 @@ int NextRootMoveParallel(void) {
  ************************************************************
  */
   for (which = 0; which < n_root_moves; which++)
-    if (!(root_moves[which].status & 8))
+    if (!(root_moves[tid * 256 + which].status & 8))
       break;
-  if (which < n_root_moves && !(root_moves[which].status & 4))
+  if (which < n_root_moves && !(root_moves[tid * 256 + which].status & 4))
     return 1;
   return 0;
 }

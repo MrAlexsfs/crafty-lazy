@@ -359,7 +359,7 @@ int Iterate(int wtm, int search_type, int root_list_done) {
                   rep_index--;
                   if (smp_max_threads > 1 && iteration > 1)
                       StartHelpers(alpha, beta, wtm);
-                  value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0);
+                  value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0, 0);
                   if (smp_max_threads > 1 && iteration > 1)
                       ThreadStopAll();      // Maybe also check if another thread found a better move?
                   rep_index++;

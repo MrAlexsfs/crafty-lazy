@@ -557,7 +557,7 @@ int abort_search;      /*  1 = abort / print stats, 2 = abort no print stats */
 int iteration;
 int root_wtm = 1;
 int last_root_value;
-ROOT_MOVE root_moves[256];
+ROOT_MOVE root_moves[256 * CPUS];
 int n_root_moves;
 int difficulty;
 int absolute_time_limit;

@@ -2,6 +2,8 @@
 #include "data.h"
 #include "epdglue.h"
 /* modified 08/03/16 */
+int CalculateDepthOffset(int tid);
+
 /*
  *******************************************************************************
  *                                                                             *
@@ -467,7 +469,7 @@ void *STDCALL ThreadInit(void *t) {
  *******************************************************************************
  */
 int ThreadSplit(TREE * tree, int ply, int depth, int alpha, int o_alpha,
-    int done) {
+    int done, int tid) {
   TREE *used;
   int64_t tblocks;
   int temp, unused = 0;
@@ -539,7 +541,7 @@ int ThreadSplit(TREE * tree, int ply, int depth, int alpha, int o_alpha,
  ************************************************************
  */
   else {
-    if (ply == 1 && (!smp_split_at_root || !NextRootMoveParallel() ||
+    if (ply == 1 && (!smp_split_at_root || !NextRootMoveParallel(tid) ||
             alpha == o_alpha))
       return 0;
     tblocks = ~thread[tree->thread_id].blocks;
@@ -667,6 +669,10 @@ void ThreadTrace(TREE * RESTRICT tree, int depth, int brief) {
  * @param tree The tree to search.
  * */
 void LazyWait(int tid, TREE * RESTRICT tree){
+    //int depth_offset = CalculateDepthOffset(tid);
+    //int local_iteration = iteration;
+    //int value;
+
     while(FOREVER){
 #if defined(LAZY_DEBUG)
         printf(" [LazyWait]\tThread %d is waiting in its main loop...\n", tid);
@@ -678,13 +684,40 @@ void LazyWait(int tid, TREE * RESTRICT tree){
 #if defined(LAZY_DEBUG)
         printf(" [LazyWait]\tThread %d is no longer stopped! Entering Search()...\n", tid);
 #endif
+        /*value = Search(tree, 1, local_iteration + depth_offset, tree->wtm,
+               tree->alpha, tree->beta, Check(tree->wtm), 0);*/
         Search(tree, 1, iteration, tree->wtm,
-               tree->alpha, tree->beta, Check(tree->wtm), 0);
+               tree->alpha, tree->beta, Check(tree->wtm), 0, tid);
         Lock(lock_smp);
+        /*
+        if (local_iteration == iteration)
+            iteration++;
+        */
         if(!tree->stop)
             ThreadStopAll();
         Unlock(lock_smp);
     }
+}
+
+/**
+ * Calculates the depth offset for the Lazy SMP threads. Half of the threads
+ * will have no offset, a quarter will have offset '1', an eight will have
+ * offset 2, and so on.
+ * @param tid The id of the thread who's depth offset is calculated.
+ * @returns The depth offset corresponding to the calling thread's id.
+ * */
+int CalculateDepthOffset(int tid) {
+    int offset = 0;
+    int diff = smp_max_threads / 2;     // We want to round up if odd => no need to add 1 before division
+    int threshold = diff;
+
+    while(tid > threshold) {
+        offset++;
+        diff = (diff + 1) / 2;          // Diff is halved (rounded up)
+        threshold += diff;
+    }
+
+    return offset;
 }
 
 /* modified 08/03/16 */
@@ -767,7 +800,7 @@ int ThreadWait(int tid, TREE * RESTRICT waiting) {
         SearchMoveList(thread[tid].tree, thread[tid].tree->ply,
         thread[tid].tree->depth, thread[tid].tree->wtm,
         thread[tid].tree->alpha, thread[tid].tree->beta,
-        thread[tid].tree->searched, thread[tid].tree->in_check, 0, parallel);
+        thread[tid].tree->searched, thread[tid].tree->in_check, 0, parallel, tid);
     tstart = ReadClock();
     Lock(thread[tid].tree->parent->lock);
     thread[tid].tree->parent->joinable = 0;

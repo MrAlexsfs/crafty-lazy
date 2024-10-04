@@ -214,6 +214,14 @@ void RootMoveList(int wtm) {
  */
   for (mvp = 1; mvp < n_root_moves; mvp++)
     root_moves[mvp].path.pathv = -MATE;
+
+  // Copy all root moves to respective indices corresponding to the rest of the threads.
+    for (int tid = 1; tid < smp_max_threads; tid++) {
+        for (int rm = 0; rm < n_root_moves; rm++) {
+            root_moves[tid * 256 + rm] = root_moves[rm];
+        }
+    }
+
   return;
 }
 

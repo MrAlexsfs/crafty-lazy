@@ -16,7 +16,7 @@
  *******************************************************************************
  */
 int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
-    int beta, int in_check, int do_null) {
+    int beta, int in_check, int do_null, int tid) {
   int repeat = 0, value = 0, pv_node = alpha != beta - 1, n_depth;
   int searched[256];
 
@@ -281,7 +281,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
       if (depth - R - 1 > 0)
         value =
             -Search(tree, ply + 1, depth - R - 1, Flip(wtm), -beta, -beta + 1,
-            0, NO_NULL);
+            0, NO_NULL, tid);
       else
         value = -Quiesce(tree, ply + 1, Flip(wtm), -beta, -beta + 1, 1);
       HashKey = save_hash_key;
@@ -312,7 +312,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
       tree->curmv[ply] = 0;
       if (depth - 2 > 0)
         value =
-            Search(tree, ply, depth - 2, wtm, alpha, beta, in_check, DO_NULL);
+            Search(tree, ply, depth - 2, wtm, alpha, beta, in_check, DO_NULL, tid);
       else
         value = Quiesce(tree, ply, wtm, alpha, beta, 1);
       if (abort_search || tree->stop)
@@ -342,7 +342,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
   searched[0] = 0;
   value =
       SearchMoveList(tree, ply, depth, wtm, alpha, beta, searched, in_check,
-      repeat, serial);
+      repeat, serial, tid);
   return value;
 }
 
@@ -377,7 +377,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
  *******************************************************************************
  */
 int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
-    int alpha, int beta, int searched[], int in_check, int repeat, int mode) {
+    int alpha, int beta, int searched[], int in_check, int repeat, int mode, int tid) {
   TREE *current;
   int extend, reduce, check, original_alpha = alpha, t_beta;
   int i, j, value = 0, pv_node = alpha != beta - 1, search_result, order;
@@ -431,7 +431,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
         mode == serial)
       break;
     order = (ply > 1) ? NextMove(current, ply, depth, wtm, in_check)
-        : NextRootMove(current, tree, wtm);
+        : NextRootMove(current, tree, wtm, tid);
     if (!order)
       break;
 #if defined(TRACE)
@@ -589,7 +589,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  */
         value =
             SearchMove(tree, ply, depth, wtm, alpha, t_beta, beta, extend,
-            reduce, check);
+            reduce, check, tid);
         if (value > alpha) {
           search_result = IN_WINDOW;
           if (value >= beta)
@@ -684,9 +684,9 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
         tree->pv[1].pathv = value;
         tree->pv[0] = tree->pv[1];
         for (best = 0; best < n_root_moves; best++)
-          if (root_moves[best].move == tree->pv[1].path[1]) {
-            root_moves[best].path = tree->pv[1];
-            root_moves[best].path.pathv = alpha;
+          if (root_moves[(tid * 256) + best].move == tree->pv[1].path[1]) {
+            root_moves[(tid * 256) + best].path = tree->pv[1];
+            root_moves[(tid * 256) + best].path.pathv = alpha;
             break;
           }
        //
@@ -694,26 +694,26 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
        //
         if (best != 0) {
           ROOT_MOVE t;
-          t = root_moves[best];
+          t = root_moves[(tid * 256) + best];
           for (i = best; i > 0; i--)
-            root_moves[i] = root_moves[i - 1];
-          root_moves[0] = t;
+            root_moves[(tid * 256) + i] = root_moves[(tid * 256) + i - 1];
+          root_moves[(tid * 256)] = t;
         }
        //
        // if a better score has already been found then move that
        // move to the front of the list and update alpha bound.
        //
         for (i = 0; i < n_root_moves; i++) {
-          if (value <= root_moves[i].path.pathv) {
+          if (value <= root_moves[(tid * 256) + i].path.pathv) {
             ROOT_MOVE t;
-            value = root_moves[i].path.pathv;
+            value = root_moves[(tid * 256) + i].path.pathv;
             alpha = value;
-            tree->pv[0] = root_moves[i].path;
+            tree->pv[0] = root_moves[(tid * 256) + i].path;
             tree->pv[1] = tree->pv[0];
-            t = root_moves[i];
+            t = root_moves[(tid * 256) + i];
             for (j = i; j > 0; j--)
-              root_moves[j] = root_moves[j - 1];
-            root_moves[0] = t;
+              root_moves[(tid * 256) + j] = root_moves[(tid * 256) + j - 1];
+            root_moves[(tid * 256)] = t;
           }
         }
         Output(tree);
@@ -878,7 +878,7 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
  *******************************************************************************
  */
 int SearchMove(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
-    int t_beta, int beta, int extend, int reduce, int check) {
+    int t_beta, int beta, int extend, int reduce, int check, int tid) {
   int value;
 /*
  ************************************************************
@@ -901,11 +901,11 @@ int SearchMove(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
   if (depth + extend - reduce - 1 > 0) {
     value =
         -Search(tree, ply + 1, depth + extend - reduce - 1, Flip(wtm),
-        -t_beta, -alpha, check, DO_NULL);
+        -t_beta, -alpha, check, DO_NULL, tid);
     if (value > alpha && reduce) {
       value =
           -Search(tree, ply + 1, depth - 1, Flip(wtm), -t_beta, -alpha, check,
-          DO_NULL);
+          DO_NULL, tid);
     }
   } else
     value = -Quiesce(tree, ply + 1, Flip(wtm), -t_beta, -alpha, 1);
@@ -930,7 +930,7 @@ int SearchMove(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
     if (depth + extend - 1 > 0)
       value =
           -Search(tree, ply + 1, depth + extend - 1, Flip(wtm), -beta, -alpha,
-          check, DO_NULL);
+          check, DO_NULL, tid);
     else
       value = -Quiesce(tree, ply + 1, Flip(wtm), -beta, -alpha, 1);
     if (abort_search || tree->stop)

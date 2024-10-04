@@ -149,7 +149,7 @@ extern int abort_search;
 extern int iteration;
 extern int root_wtm;
 extern int last_root_value;
-extern ROOT_MOVE root_moves[256];
+extern ROOT_MOVE root_moves[256 * CPUS];
 extern int n_root_moves;
 extern int difficulty;
 extern int time_limit;
