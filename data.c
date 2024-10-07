@@ -24,7 +24,7 @@ char buffer[4096];
 int line_length = 80;
 unsigned char convert_buff[8];
 int nargs;
-int failhi_delta, faillo_delta;
+int failhi_delta[CPUS], faillo_delta[CPUS];
 int ponder_value;
 int move_actually_played;
 int ponder_move;

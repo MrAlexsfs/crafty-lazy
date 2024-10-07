@@ -346,8 +346,8 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-              failhi_delta = 16;
-              faillo_delta = 16;
+              failhi_delta[0] = 16;
+              faillo_delta[0] = 16;
               for (i = 0; i < n_root_moves; i++) {
                   if (i || iteration == 1)
                       root_moves[i].path.pathv = -MATE;
@@ -361,7 +361,7 @@ int Iterate(int wtm, int search_type, int root_list_done) {
                       StartHelpers(alpha, beta, wtm);
                   value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0, 0);
                   if (smp_max_threads > 1 && iteration > 1)
-                      ThreadStopAll();      // Maybe also check if another thread found a better move?
+                      ThreadStopAll();
                   rep_index++;
                   end_time = ReadClock();
                   if (abort_search)
@@ -398,10 +398,10 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  ************************************************************
  */
                   if (value >= beta) {
-                      beta = Min(beta + failhi_delta, MATE);
-                      failhi_delta *= 2;
-                      if (failhi_delta > 10 * PAWN_VALUE)
-                          failhi_delta = 99999;
+                      beta = Min(beta + failhi_delta[0], MATE);
+                      failhi_delta[0] *= 2;
+                      if (failhi_delta[0] > 10 * PAWN_VALUE)
+                          failhi_delta[0] = 99999;
                       root_moves[current_rm].status &= 7;
                       root_moves[current_rm].bm_age = 4;
                       if ((root_moves[current_rm].status & 2) == 0)
@@ -443,10 +443,10 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  ************************************************************
  */
                   else if (value <= alpha) {
-                      alpha = Max(alpha - faillo_delta, -MATE);
-                      faillo_delta *= 2;
-                      if (faillo_delta > 10 * PAWN_VALUE)
-                          faillo_delta = 99999;
+                      alpha = Max(alpha - faillo_delta[0], -MATE);
+                      faillo_delta[0] *= 2;
+                      if (faillo_delta[0] > 10 * PAWN_VALUE)
+                          faillo_delta[0] = 99999;
                       root_moves[current_rm].status &= 7;
                       if ((root_moves[current_rm].status & 1) == 0)
                           difficulty = ComputeDifficulty(Max(100, difficulty), -1);

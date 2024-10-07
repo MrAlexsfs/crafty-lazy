@@ -662,16 +662,13 @@ void ThreadTrace(TREE * RESTRICT tree, int depth, int brief) {
 
 /**
  * A waiting loop for all helper threads. Starts searching when stop != 1.
- * After the search finishes it will tell the other helper threads to stop
- * their search as well. A lock is used to stop the other threads so that
- * only one thread may stop the others.
+ * After the search finishes it will set itself as stopped. No helper thread
+ * will be forced to stop by another helper, only by the main thread.
  * @param tid The id of the thread.
  * @param tree The tree to search.
  * */
 void LazyWait(int tid, TREE * RESTRICT tree){
-    //int depth_offset = CalculateDepthOffset(tid);
-    //int local_iteration = iteration;
-    //int value;
+    int depth_offset = CalculateDepthOffset(tid);
 
     while(FOREVER){
 #if defined(LAZY_DEBUG)
@@ -684,18 +681,9 @@ void LazyWait(int tid, TREE * RESTRICT tree){
 #if defined(LAZY_DEBUG)
         printf(" [LazyWait]\tThread %d is no longer stopped! Entering Search()...\n", tid);
 #endif
-        /*value = Search(tree, 1, local_iteration + depth_offset, tree->wtm,
-               tree->alpha, tree->beta, Check(tree->wtm), 0);*/
-        Search(tree, 1, iteration, tree->wtm,
+        Search(tree, 1, iteration + depth_offset, tree->wtm,
                tree->alpha, tree->beta, Check(tree->wtm), 0, tid);
-        Lock(lock_smp);
-        /*
-        if (local_iteration == iteration)
-            iteration++;
-        */
-        if(!tree->stop)
-            ThreadStopAll();
-        Unlock(lock_smp);
+        tree->stop = 1;
     }
 }
 
@@ -825,6 +813,8 @@ void StartHelpers(int alpha, int beta, int wtm) {
         thread[i].tree->alpha = alpha;
         thread[i].tree->beta = beta;
         thread[i].tree->wtm = wtm;
+        failhi_delta[i] = 16;
+        faillo_delta[i] = 16;
         thread[i].tree->stop = 0;
     }
 }

@@ -43,7 +43,7 @@ int Search(TREE * RESTRICT tree, int ply, int depth, int wtm, int alpha,
     return 0;
   }
 #endif
-  if (tree->thread_id == 0) {           //Should we keep this as is, or make each thread check their own inpu/timeout?
+  if (tree->thread_id == 0) {
     if (--next_time_check <= 0) {
       next_time_check = nodes_between_time_checks;
       if (TimeCheck(tree, 1)) {
@@ -717,8 +717,8 @@ int SearchMoveList(TREE * RESTRICT tree, int ply, int depth, int wtm,
           }
         }
         Output(tree);
-        failhi_delta = 16;
-        faillo_delta = 16;
+        failhi_delta[tid] = 16;
+        faillo_delta[tid] = 16;
       }
     }
 /*

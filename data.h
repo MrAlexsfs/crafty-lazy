@@ -99,7 +99,7 @@ extern int LMP_depth;
 extern int LMP_base;
 extern double LMP_scale;
 extern double LMP_scale;
-extern int failhi_delta, faillo_delta;
+extern int failhi_delta[CPUS], faillo_delta[CPUS];
 extern int ponder_value;
 extern int move_actually_played;
 extern int analyze_mode;
