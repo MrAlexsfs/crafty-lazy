@@ -2,6 +2,8 @@
 #include "data.h"
 #include "epdglue.h"
 /* modified 08/03/16 */
+int CalculateDepthOffset(int tid);
+
 /*
  *******************************************************************************
  *                                                                             *
@@ -414,19 +416,34 @@ void ThreadAffinity(int cpu) {
  *******************************************************************************
  */
 void *STDCALL ThreadInit(void *t) {
-  int tid = (int64_t) t;
+    int tid = (int64_t) t;
 
   ThreadAffinity(tid);
 #if !defined(UNIX)
   ThreadMalloc((uint64_t) tid);
 #endif
   thread[tid].blocks = 0xffffffffffffffffull;
+  thread[tid].tree = block[tid * 64 + 1];
   Lock(lock_smp);
-  initialized_threads++;
+  initialized_threads++;    // It seems that we need to manually initialise the threads, assigning them trees and so on...
   Unlock(lock_smp);
+#if defined(LAZY_DEBUG)
+    printf(" [ThreadInit]\tThread %d initialized, entering WaitForAllThreadsInitialized()\n", tid);
+#endif
   WaitForAllThreadsInitialized();
-  ThreadWait(tid, (TREE *) 0);
+#if defined(LAZY_DEBUG)
+    printf(" [ThreadInit]\tAll threads initialized, telling Thread %d to stop...\n", tid);
+#endif
+  thread[tid].tree->stop = 1;
+#if defined(LAZY_DEBUG)
+    printf(" [ThreadInit]\tThread %d done waiting, now entering LazyWait()\n", tid);
+#endif
+  LazyWait(tid, thread[tid].tree);
+  //ThreadWait(tid, (TREE *) 0);
   Lock(lock_smp);
+#if defined(LAZY_DEBUG)
+    printf(" [ThreadInit]\tTerminating Thread %d...\n", tid);
+#endif
   smp_threads--;
   Unlock(lock_smp);
   return 0;
@@ -452,7 +469,7 @@ void *STDCALL ThreadInit(void *t) {
  *******************************************************************************
  */
 int ThreadSplit(TREE * tree, int ply, int depth, int alpha, int o_alpha,
-    int done) {
+    int done, int tid) {
   TREE *used;
   int64_t tblocks;
   int temp, unused = 0;
@@ -524,7 +541,7 @@ int ThreadSplit(TREE * tree, int ply, int depth, int alpha, int o_alpha,
  ************************************************************
  */
   else {
-    if (ply == 1 && (!smp_split_at_root || !NextRootMoveParallel() ||
+    if (ply == 1 && (!smp_split_at_root || !NextRootMoveParallel(tid) ||
             alpha == o_alpha))
       return 0;
     tblocks = ~thread[tree->thread_id].blocks;
@@ -539,6 +556,17 @@ int ThreadSplit(TREE * tree, int ply, int depth, int alpha, int o_alpha,
       return 0;
   }
   return 1;
+}
+
+/**
+ * Goes through all helper threads and tells them to stop searching.
+ * */
+void ThreadStopAll() {
+    for (int tid = 1; tid < smp_max_threads; tid++) {
+        Lock(thread[tid].tree->lock);
+        thread[tid].tree->stop = 1;
+        Unlock(thread[tid].tree->lock);
+    }
 }
 
 /* modified 08/03/16 */
@@ -632,6 +660,54 @@ void ThreadTrace(TREE * RESTRICT tree, int depth, int brief) {
   Unlock(tree->lock);
 }
 
+/**
+ * A waiting loop for all helper threads. Starts searching when stop != 1.
+ * After the search finishes it will set itself as stopped. No helper thread
+ * will be forced to stop by another helper, only by the main thread.
+ * @param tid The id of the thread.
+ * @param tree The tree to search.
+ * */
+void LazyWait(int tid, TREE * RESTRICT tree){
+    int depth_offset = CalculateDepthOffset(tid);
+
+    while(FOREVER){
+#if defined(LAZY_DEBUG)
+        printf(" [LazyWait]\tThread %d is waiting in its main loop...\n", tid);
+#endif
+        while(tree->stop){
+            if (thread[tid].terminate)
+                return;
+        }
+#if defined(LAZY_DEBUG)
+        printf(" [LazyWait]\tThread %d is no longer stopped! Entering Search()...\n", tid);
+#endif
+        Search(tree, 1, iteration + depth_offset, tree->wtm,
+               tree->alpha, tree->beta, Check(tree->wtm), 0, tid);
+        tree->stop = 1;
+    }
+}
+
+/**
+ * Calculates the depth offset for the Lazy SMP threads. Half of the threads
+ * will have no offset, a quarter will have offset '1', an eight will have
+ * offset 2, and so on.
+ * @param tid The id of the thread who's depth offset is calculated.
+ * @returns The depth offset corresponding to the calling thread's id.
+ * */
+int CalculateDepthOffset(int tid) {
+    int offset = 0;
+    int diff = smp_max_threads / 2;     // We want to round up if odd => no need to add 1 before division
+    int threshold = diff;
+
+    while(tid > threshold) {
+        offset++;
+        diff = (diff + 1) / 2;          // Diff is halved (rounded up)
+        threshold += diff;
+    }
+
+    return offset;
+}
+
 /* modified 08/03/16 */
 /*
  *******************************************************************************
@@ -712,7 +788,7 @@ int ThreadWait(int tid, TREE * RESTRICT waiting) {
         SearchMoveList(thread[tid].tree, thread[tid].tree->ply,
         thread[tid].tree->depth, thread[tid].tree->wtm,
         thread[tid].tree->alpha, thread[tid].tree->beta,
-        thread[tid].tree->searched, thread[tid].tree->in_check, 0, parallel);
+        thread[tid].tree->searched, thread[tid].tree->in_check, 0, parallel, tid);
     tstart = ReadClock();
     Lock(thread[tid].tree->parent->lock);
     thread[tid].tree->parent->joinable = 0;
@@ -724,6 +800,85 @@ int ThreadWait(int tid, TREE * RESTRICT waiting) {
     tend = ReadClock();
     thread[tid].idle += tend - tstart;
   }
+}
+
+/**
+ * Prepares the helper threads for searching by giving them the required values.
+ * @param alpha The alpha value required for alpha-beta pruning.
+ * @param beta The beta value required for alpha-beta pruning.
+ * @param wtm The current side to move (1 == white, 0 == black).
+ * */
+void StartHelpers(int alpha, int beta, int wtm) {
+    for (int i = 1; i < smp_max_threads; i++) {
+        thread[i].tree->alpha = alpha;
+        thread[i].tree->beta = beta;
+        thread[i].tree->wtm = wtm;
+        failhi_delta[i] = 16;
+        faillo_delta[i] = 16;
+        thread[i].tree->stop = 0;
+    }
+}
+
+/**
+ * Copies all relevant information from the parent thread to the helpers.
+ * @param parent The parent thread to copy data from.
+ * */
+void CopyToHelpers(TREE * RESTRICT parent) {
+    int i, ply, tid;
+#if defined(LAZY_DEBUG)
+    printf(" [CopyToHelpers]\tCopying data from parent to helpers...\n");
+#endif
+    for (tid = 1; tid < smp_max_threads; tid++) {
+#if defined(LAZY_DEBUG)
+        printf(" [CopyToHelpers]\tCopying to thread %d...\n", tid);
+#endif
+        ply = parent->ply;
+        thread[tid].tree->ply = ply;
+        thread[tid].tree->position = parent->position;
+        for (i = 0; i <= rep_index + parent->ply; i++)
+            thread[tid].tree->rep_list[i] = parent->rep_list[i];
+        for (i = ply - 1; i < MAXPLY; i++)
+            thread[tid].tree->killers[i] = parent->killers[i];
+        for (i = 0; i < 4096; i++) {
+            thread[tid].tree->counter_move[i] = parent->counter_move[i];
+            thread[tid].tree->move_pair[i] = parent->move_pair[i];
+        }
+        for (i = ply - 1; i <= ply; i++) {
+            thread[tid].tree->curmv[i] = parent->curmv[i];
+            thread[tid].tree->pv[i] = parent->pv[i];
+        }
+        thread[tid].tree->in_check = parent->in_check;
+        thread[tid].tree->last[ply] = thread[tid].tree->move_list;
+        thread[tid].tree->status[ply] = parent->status[ply];
+        thread[tid].tree->status[1] = parent->status[1];
+        thread[tid].tree->save_hash_key[ply] = parent->save_hash_key[ply];
+        thread[tid].tree->save_pawn_hash_key[ply] = parent->save_pawn_hash_key[ply];
+        thread[tid].tree->nodes_searched = 0;
+        thread[tid].tree->fail_highs = 0;
+        thread[tid].tree->fail_high_first_move = 0;
+        thread[tid].tree->evaluations = 0;
+        thread[tid].tree->egtb_probes = 0;
+        thread[tid].tree->egtb_hits = 0;
+        thread[tid].tree->extensions_done = 0;
+        thread[tid].tree->qchecks_done = 0;
+        thread[tid].tree->moves_fpruned = 0;
+        thread[tid].tree->moves_mpruned = 0;
+        for (i = 0; i < 16; i++) {
+            thread[tid].tree->LMR_done[i] = 0;
+            thread[tid].tree->null_done[i] = 0;
+        }
+        thread[tid].tree->alpha = parent->alpha;
+        thread[tid].tree->beta = parent->beta;
+        thread[tid].tree->value = parent->value;
+        thread[tid].tree->wtm = parent->wtm;
+        thread[tid].tree->depth = parent->depth;
+        thread[tid].tree->searched = parent->searched;
+        strcpy(thread[tid].tree->root_move_text, parent->root_move_text);
+        strcpy(thread[tid].tree->remaining_moves_text, parent->remaining_moves_text);
+    }
+#if defined(LAZY_DEBUG)
+    printf(" [CopyToHelpers]\tDone copying data from parent to helpers!\n");
+#endif
 }
 
 /* modified 08/03/16 */
@@ -969,7 +1124,13 @@ TREE *GetBlock(TREE * RESTRICT parent, int tid) {
  *******************************************************************************
  */
 void WaitForAllThreadsInitialized(void) {
+#if defined(LAZY_DEBUG)
+    printf("Entered WaitForAllThreadsInitialized\n");
+#endif
   while (initialized_threads < smp_max_threads); /* Do nothing */
+#if defined(LAZY_DEBUG)
+    printf(" [WaitForAllThreadsInitialized]\tOut of loop, returning...\n");
+#endif
 }
 
 #if !defined (UNIX)

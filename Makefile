@@ -109,6 +109,16 @@ unix-clang:
 		LDFLAGS='$(LDFLAGS) -fprofile-use -lstdc++' \
 		crafty-make
 
+unix-clang-lazy-debug:
+	@/usr/local/opt/llvm/bin/llvm-profdata merge -output=crafty.profdata *.profraw
+	$(MAKE) -j target=UNIX \
+		CC=clang \
+		opt='-DSYZYGY -DTEST -DCPUS=4 -DLAZY_DEBUG' \
+		CFLAGS='-Wall -Wno-array-bounds -pipe -O3 \
+			-mpopcnt -fprofile-instr-use=crafty.profdata' \
+		LDFLAGS='$(LDFLAGS) -fprofile-use -lstdc++' \
+		crafty-make
+
 unix-clang-profile:
 	$(MAKE) -j target=UNIX \
 		CC=clang \

@@ -24,7 +24,7 @@ char buffer[4096];
 int line_length = 80;
 unsigned char convert_buff[8];
 int nargs;
-int failhi_delta, faillo_delta;
+int failhi_delta[CPUS], faillo_delta[CPUS];
 int ponder_value;
 int move_actually_played;
 int ponder_move;
@@ -557,7 +557,7 @@ int abort_search;      /*  1 = abort / print stats, 2 = abort no print stats */
 int iteration;
 int root_wtm = 1;
 int last_root_value;
-ROOT_MOVE root_moves[256];
+ROOT_MOVE root_moves[256 * CPUS];
 int n_root_moves;
 int difficulty;
 int absolute_time_limit;

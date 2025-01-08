@@ -129,10 +129,10 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  */
   if (!root_list_done)
     RootMoveList(wtm);
-  if (booking || (!Book(tree, wtm) && !RootMoveEGTB(wtm)))
-    do {
-      if (abort_search)
-        break;
+  if (booking || (!Book(tree, wtm) && !RootMoveEGTB(wtm))) {
+      do {
+          if (abort_search)
+              break;
 /*
  ************************************************************
  *                                                          *
@@ -152,21 +152,24 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-      if (n_root_moves == 0) {
-        program_end_time = ReadClock();
-        tree->pv[0].pathl = 0;
-        tree->pv[0].pathd = 0;
-        if (Check(wtm))
-          value = -(MATE - 1);
-        else
-          value = DrawScore(wtm);
-        Print(2, "        depth     time       score   variation\n");
-        Print(2, "                             Mated   (no moves)\n");
-        tree->nodes_searched = 1;
-        if (!puzzling)
-          last_root_value = value;
-        return value;
-      }
+          if (n_root_moves == 0) {
+              program_end_time = ReadClock();
+              tree->pv[0].pathl = 0;
+              tree->pv[0].pathd = 0;
+              if (Check(wtm))
+                  value = -(MATE - 1);
+              else
+                  value = DrawScore(wtm);
+              Print(2, "        depth     time       score   variation\n");
+              Print(2, "                             Mated   (no moves)\n");
+              tree->nodes_searched = 1;
+              if (!puzzling)
+                  last_root_value = value;
+#if defined(LAZY_DEBUG)
+              printf(" [Iterate]\tNo legal moves, returning...\n");
+#endif
+              return value;
+          }
 /*
  ************************************************************
  *                                                          *
@@ -178,22 +181,22 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-      TimeSet(search_type);
-      iteration = 1;
-      noise_block = 0;
-      force_print = 0;
-      if (last_pv.pathd > 1) {
-        iteration = last_pv.pathd + 1;
-        value = last_root_value;
-        tree->pv[0] = last_pv;
-        root_moves[0].path = tree->pv[0];
-        noise_block = 1;
-        force_print = 1;
-      } else
-        difficulty = 100;
-      Print(2, "        depth     time       score   variation (%d)\n",
-          iteration);
-      abort_search = 0;
+          TimeSet(search_type);
+          iteration = 1;
+          noise_block = 0;
+          force_print = 0;
+          if (last_pv.pathd > 1) {
+              iteration = last_pv.pathd + 1;
+              value = last_root_value;
+              tree->pv[0] = last_pv;
+              root_moves[0].path = tree->pv[0];
+              noise_block = 1;
+              force_print = 1;
+          } else
+              difficulty = 100;
+          Print(2, "        depth     time       score   variation (%d)\n",
+                iteration);
+          abort_search = 0;
 /*
  ************************************************************
  *                                                          *
@@ -202,14 +205,14 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-      tree->pv[0] = last_pv;
-      if (iteration > 1) {
-        alpha = Max(-MATE, last_value - 16);
-        beta = Min(MATE, last_value + 16);
-      } else {
-        alpha = -MATE;
-        beta = MATE;
-      }
+          tree->pv[0] = last_pv;
+          if (iteration > 1) {
+              alpha = Max(-MATE, last_value - 16);
+              beta = Min(MATE, last_value + 16);
+          } else {
+              alpha = -MATE;
+              beta = MATE;
+          }
 /*
  ************************************************************
  *                                                          *
@@ -224,27 +227,37 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  ************************************************************
  */
 #if (CPUS > 1)
-      if (smp_max_threads > smp_threads + 1) {
-        long proc;
+          if (smp_max_threads > smp_threads + 1) {
+              long proc;
 
-        initialized_threads = 1;
-        Print(32, "starting thread");
-        for (proc = smp_threads + 1; proc < smp_max_threads; proc++) {
-          Print(32, " %d", proc);
+              initialized_threads = 1;
+              Print(32, "starting thread");
+              for (proc = smp_threads + 1; proc < smp_max_threads; proc++) {
+                  Print(32, " %d", proc);
 #  if defined(UNIX)
-          pthread_create(&pt, &attributes, ThreadInit, (void *) proc);
+                  pthread_create(&pt, &attributes, ThreadInit, (void *) proc);
 #  else
-          NumaStartThread(ThreadInit, (void *) proc);
+                  NumaStartThread(ThreadInit, (void *) proc);
 #  endif
-          smp_threads++;
-        }
-        Print(32, " <done>\n");
-      }
-      WaitForAllThreadsInitialized();
-      ThreadAffinity(0);
+                  smp_threads++;
+              }
+              Print(32, " <done>\n");
+          }
+#if defined(LAZY_DEBUG)
+          printf(" [Iterate]\tThread 0 entering WaitForAllThreadsInitialized()\n");
 #endif
-      if (search_nodes)
-        nodes_between_time_checks = search_nodes;
+          WaitForAllThreadsInitialized();
+#if defined(LAZY_DEBUG)
+          printf(" [Iterate]\tAll threads initialized, Thread 0 setting affinity...\n");
+#endif
+          ThreadAffinity(0);
+#if defined(LAZY_DEBUG)
+          printf(" [Iterate]\tThread 0 calling CopyToHelpers()\n");
+#endif
+          CopyToHelpers(tree);
+#endif
+          if (search_nodes)
+              nodes_between_time_checks = search_nodes;
 /*
  ************************************************************
  *                                                          *
@@ -260,25 +273,28 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-      for (; iteration <= MAXPLY - 5; iteration++) {
-        twtm = wtm;
-        for (i = 1; i < (int) tree->pv[0].pathl; i++) {
-          if (!VerifyMove(tree, i, twtm, tree->pv[0].path[i])) {
-            Print(2048, "ERROR, not installing bogus pv info at ply=%d\n", i);
-            Print(2048, "not installing from=%d  to=%d  piece=%d\n",
-                From(tree->pv[0].path[i]), To(tree->pv[0].path[i]),
-                Piece(tree->pv[0].path[i]));
-            Print(2048, "pathlen=%d\n", tree->pv[0].pathl);
-            break;
-          }
-          HashStorePV(tree, twtm, i);
-          MakeMove(tree, i, twtm, tree->pv[0].path[i]);
-          twtm = Flip(twtm);
-        }
-        for (i--; i > 0; i--) {
-          twtm = Flip(twtm);
-          UnmakeMove(tree, i, twtm, tree->pv[0].path[i]);
-        }
+          for (; iteration <= MAXPLY - 5; iteration++) {
+#if defined(LAZY_DEBUG)
+              printf(" [Iterate]\tStarting iteration %d\n", iteration);
+#endif
+              twtm = wtm;
+              for (i = 1; i < (int) tree->pv[0].pathl; i++) {
+                  if (!VerifyMove(tree, i, twtm, tree->pv[0].path[i])) {
+                      Print(2048, "ERROR, not installing bogus pv info at ply=%d\n", i);
+                      Print(2048, "not installing from=%d  to=%d  piece=%d\n",
+                            From(tree->pv[0].path[i]), To(tree->pv[0].path[i]),
+                            Piece(tree->pv[0].path[i]));
+                      Print(2048, "pathlen=%d\n", tree->pv[0].pathl);
+                      break;
+                  }
+                  HashStorePV(tree, twtm, i);
+                  MakeMove(tree, i, twtm, tree->pv[0].path[i]);
+                  twtm = Flip(twtm);
+              }
+              for (i--; i > 0; i--) {
+                  twtm = Flip(twtm);
+                  UnmakeMove(tree, i, twtm, tree->pv[0].path[i]);
+              }
 /*
  ************************************************************
  *                                                          *
@@ -297,27 +313,27 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        if (trace_level) {
-          Print(32, "==================================\n");
-          Print(32, "=      search iteration %2d       =\n", iteration);
-          Print(32, "==================================\n");
-        }
-        if (tree->nodes_searched) {
-          nodes_between_time_checks =
-              nodes_per_second / (10 * Max(smp_max_threads, 1));
-          if (!analyze_mode) {
-            if (time_limit < 1000)
-              nodes_between_time_checks /= 10;
-            if (time_limit < 100)
-              nodes_between_time_checks /= 10;
-          } else
-            nodes_between_time_checks = Min(nodes_per_second, 1000000);
-        }
-        if (search_nodes)
-          nodes_between_time_checks = search_nodes - tree->nodes_searched;
-        nodes_between_time_checks =
-            Min(nodes_between_time_checks, MAX_TC_NODES);
-        next_time_check = nodes_between_time_checks;
+              if (trace_level) {
+                  Print(32, "==================================\n");
+                  Print(32, "=      search iteration %2d       =\n", iteration);
+                  Print(32, "==================================\n");
+              }
+              if (tree->nodes_searched) {
+                  nodes_between_time_checks =
+                          nodes_per_second / (10 * Max(smp_max_threads, 1));
+                  if (!analyze_mode) {
+                      if (time_limit < 1000)
+                          nodes_between_time_checks /= 10;
+                      if (time_limit < 100)
+                          nodes_between_time_checks /= 10;
+                  } else
+                      nodes_between_time_checks = Min(nodes_per_second, 1000000);
+              }
+              if (search_nodes)
+                  nodes_between_time_checks = search_nodes - tree->nodes_searched;
+              nodes_between_time_checks =
+                      Min(nodes_between_time_checks, MAX_TC_NODES);
+              next_time_check = nodes_between_time_checks;
 /*
  ************************************************************
  *                                                          *
@@ -330,25 +346,29 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        failhi_delta = 16;
-        faillo_delta = 16;
-        for (i = 0; i < n_root_moves; i++) {
-          if (i || iteration == 1)
-            root_moves[i].path.pathv = -MATE;
-          root_moves[i].status &= 4;
-        }
-        while (1) {
-          if (smp_max_threads > 1)
-            smp_split = 1;
-          rep_index--;
-          value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0);
-          rep_index++;
-          end_time = ReadClock();
-          if (abort_search)
-            break;
-          for (current_rm = 0; current_rm < n_root_moves; current_rm++)
-            if (tree->pv[0].path[1] == root_moves[current_rm].move)
-              break;
+              failhi_delta[0] = 16;
+              faillo_delta[0] = 16;
+              for (i = 0; i < n_root_moves; i++) {
+                  if (i || iteration == 1)
+                      root_moves[i].path.pathv = -MATE;
+                  root_moves[i].status &= 4;
+              }
+              while (1) {
+                  if (smp_max_threads > 1)
+                      smp_split = 1;
+                  rep_index--;
+                  if (smp_max_threads > 1 && iteration > 1)
+                      StartHelpers(alpha, beta, wtm);
+                  value = Search(tree, 1, iteration, wtm, alpha, beta, Check(wtm), 0, 0);
+                  if (smp_max_threads > 1 && iteration > 1)
+                      ThreadStopAll();
+                  rep_index++;
+                  end_time = ReadClock();
+                  if (abort_search)
+                      break;
+                  for (current_rm = 0; current_rm < n_root_moves; current_rm++)
+                      if (tree->pv[0].path[1] == root_moves[current_rm].move)
+                          break;
 /*
  ************************************************************
  *                                                          *
@@ -377,23 +397,23 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-          if (value >= beta) {
-            beta = Min(beta + failhi_delta, MATE);
-            failhi_delta *= 2;
-            if (failhi_delta > 10 * PAWN_VALUE)
-              failhi_delta = 99999;
-            root_moves[current_rm].status &= 7;
-            root_moves[current_rm].bm_age = 4;
-            if ((root_moves[current_rm].status & 2) == 0)
-              difficulty = ComputeDifficulty(difficulty, +1);
-            root_moves[current_rm].status |= 2;
-            DisplayFail(tree, 1, 5, wtm, end_time - start_time,
-                root_moves[current_rm].move, value, force_print);
-            temp_rm = root_moves[current_rm];
-            for (i = current_rm; i > 0; i--)
-              root_moves[i] = root_moves[i - 1];
-            root_moves[0] = temp_rm;
-          }
+                  if (value >= beta) {
+                      beta = Min(beta + failhi_delta[0], MATE);
+                      failhi_delta[0] *= 2;
+                      if (failhi_delta[0] > 10 * PAWN_VALUE)
+                          failhi_delta[0] = 99999;
+                      root_moves[current_rm].status &= 7;
+                      root_moves[current_rm].bm_age = 4;
+                      if ((root_moves[current_rm].status & 2) == 0)
+                          difficulty = ComputeDifficulty(difficulty, +1);
+                      root_moves[current_rm].status |= 2;
+                      DisplayFail(tree, 1, 5, wtm, end_time - start_time,
+                                  root_moves[current_rm].move, value, force_print);
+                      temp_rm = root_moves[current_rm];
+                      for (i = current_rm; i > 0; i--)
+                          root_moves[i] = root_moves[i - 1];
+                      root_moves[0] = temp_rm;
+                  }
 /*
  ************************************************************
  *                                                          *
@@ -422,20 +442,20 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-          else if (value <= alpha) {
-            alpha = Max(alpha - faillo_delta, -MATE);
-            faillo_delta *= 2;
-            if (faillo_delta > 10 * PAWN_VALUE)
-              faillo_delta = 99999;
-            root_moves[current_rm].status &= 7;
-            if ((root_moves[current_rm].status & 1) == 0)
-              difficulty = ComputeDifficulty(Max(100, difficulty), -1);
-            root_moves[current_rm].status |= 1;
-            DisplayFail(tree, 2, 5, wtm, end_time - start_time,
-                root_moves[current_rm].move, value, force_print);
-          } else
-            break;
-        }
+                  else if (value <= alpha) {
+                      alpha = Max(alpha - faillo_delta[0], -MATE);
+                      faillo_delta[0] *= 2;
+                      if (faillo_delta[0] > 10 * PAWN_VALUE)
+                          faillo_delta[0] = 99999;
+                      root_moves[current_rm].status &= 7;
+                      if ((root_moves[current_rm].status & 1) == 0)
+                          difficulty = ComputeDifficulty(Max(100, difficulty), -1);
+                      root_moves[current_rm].status |= 1;
+                      DisplayFail(tree, 2, 5, wtm, end_time - start_time,
+                                  root_moves[current_rm].move, value, force_print);
+                  } else
+                      break;
+              }
 /*
  ************************************************************
  *                                                          *
@@ -446,20 +466,20 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        if (value > alpha && value < beta)
-          last_root_value = value;
-        correct = solution_type;
-        for (i = 0; i < number_of_solutions; i++) {
-          if (!solution_type) {
-            if (solutions[i] == tree->pv[0].path[1])
-              correct = 1;
-          } else if (solutions[i] == root_moves[current_rm].move)
-            correct = 0;
-        }
-        if (correct)
-          correct_count++;
-        else
-          correct_count = 0;
+              if (value > alpha && value < beta)
+                  last_root_value = value;
+              correct = solution_type;
+              for (i = 0; i < number_of_solutions; i++) {
+                  if (!solution_type) {
+                      if (solutions[i] == tree->pv[0].path[1])
+                          correct = 1;
+                  } else if (solutions[i] == root_moves[current_rm].move)
+                      correct = 0;
+              }
+              if (correct)
+                  correct_count++;
+              else
+                  correct_count = 0;
 /*
  ************************************************************
  *                                                          *
@@ -469,14 +489,14 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        for (i = 0; i < n_root_moves; i++) {
-          root_moves[i].status &= 3;
-          if (root_moves[i].bm_age)
-            root_moves[i].bm_age--;
-          if (root_moves[i].bm_age)
-            root_moves[i].status |= 4;
-        }
-        difficulty = ComputeDifficulty(difficulty, 0);
+              for (i = 0; i < n_root_moves; i++) {
+                  root_moves[i].status &= 3;
+                  if (root_moves[i].bm_age)
+                      root_moves[i].bm_age--;
+                  if (root_moves[i].bm_age)
+                      root_moves[i].status |= 4;
+              }
+              difficulty = ComputeDifficulty(difficulty, 0);
 /*
  ************************************************************
  *                                                          *
@@ -490,22 +510,22 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        if (display_options & 64) {
-          Print(64, "      rmove   score    age  S ! ?\n");
-          for (i = 0; i < n_root_moves; i++) {
-            Print(64, " %10s ", OutputMove(tree, 1, wtm, root_moves[i].move));
-            if (root_moves[i].path.pathv > -MATE &&
-                root_moves[i].path.pathv <= MATE)
-              Print(64, "%s", DisplayEvaluation(root_moves[i].path.pathv,
-                      wtm));
-            else
-              Print(64, "  -----");
-            Print(64, "     %d   %d %d %d\n", root_moves[i].bm_age,
-                (root_moves[i].status & 4) != 0,
-                (root_moves[i].status & 2) != 0,
-                (root_moves[i].status & 1) != 0);
-          }
-        }
+              if (display_options & 64) {
+                  Print(64, "      rmove   score    age  S ! ?\n");
+                  for (i = 0; i < n_root_moves; i++) {
+                      Print(64, " %10s ", OutputMove(tree, 1, wtm, root_moves[i].move));
+                      if (root_moves[i].path.pathv > -MATE &&
+                          root_moves[i].path.pathv <= MATE)
+                          Print(64, "%s", DisplayEvaluation(root_moves[i].path.pathv,
+                                                            wtm));
+                      else
+                          Print(64, "  -----");
+                      Print(64, "     %d   %d %d %d\n", root_moves[i].bm_age,
+                            (root_moves[i].status & 4) != 0,
+                            (root_moves[i].status & 2) != 0,
+                            (root_moves[i].status & 1) != 0);
+                  }
+              }
 /*
  ************************************************************
  *                                                          *
@@ -515,22 +535,22 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        if (end_time - start_time > 10)
-          nodes_per_second =
-              tree->nodes_searched * 100 / (uint64_t) (end_time - start_time);
-        else
-          nodes_per_second = 1000000;
-        tree->pv[0] = root_moves[0].path;
-        if (!abort_search && value != -(MATE - 1)) {
-          if (end_time - start_time >= noise_level) {
-            DisplayPV(tree, 5, wtm, end_time - start_time, &tree->pv[0],
-                force_print);
-            noise_block = 0;
-          } else
-            noise_block = 1;
-        }
-        alpha = Max(-MATE, value - 16);
-        beta = Min(MATE, value + 16);
+              if (end_time - start_time > 10)
+                  nodes_per_second =
+                          tree->nodes_searched * 100 / (uint64_t) (end_time - start_time);
+              else
+                  nodes_per_second = 1000000;
+              tree->pv[0] = root_moves[0].path;
+              if (!abort_search && value != -(MATE - 1)) {
+                  if (end_time - start_time >= noise_level) {
+                      DisplayPV(tree, 5, wtm, end_time - start_time, &tree->pv[0],
+                                force_print);
+                      noise_block = 0;
+                  } else
+                      noise_block = 1;
+              }
+              alpha = Max(-MATE, value - 16);
+              beta = Min(MATE, value + 16);
 /*
  ************************************************************
  *                                                          *
@@ -547,21 +567,24 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-        if (TimeCheck(tree, 0))
-          break;
-        if (iteration > 3 && value > 32000 && value >= (MATE - iteration + 3)
-            && value > last_mate_score)
-          break;
-        if ((iteration >= search_depth) && search_depth)
-          break;
-        if (abort_search)
-          break;
-        end_time = ReadClock() - start_time;
-        if (correct_count >= early_exit)
-          break;
-        if (search_nodes && tree->nodes_searched >= search_nodes)
-          break;
-      }
+              if (TimeCheck(tree, 0))
+                  break;
+              if (iteration > 3 && value > 32000 && value >= (MATE - iteration + 3)
+                  && value > last_mate_score)
+                  break;
+              if ((iteration >= search_depth) && search_depth)
+                  break;
+              if (abort_search)
+                  break;
+              end_time = ReadClock() - start_time;
+              if (correct_count >= early_exit)
+                  break;
+              if (search_nodes && tree->nodes_searched >= search_nodes)
+                  break;
+          }
+#if defined(LAZY_DEBUG)
+          printf(" [Iterate]\tExited final iteration\n");
+#endif
 /*
  ************************************************************
  *                                                          *
@@ -584,87 +607,93 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-      end_time = ReadClock();
-      if (end_time > 10)
-        nodes_per_second =
-            (uint64_t) tree->nodes_searched * 100 / Max((uint64_t) end_time -
-            start_time, 1);
-      if (abort_search != 2 && !puzzling) {
-        if (noise_block)
-          DisplayPV(tree, 5, wtm, end_time - start_time, &tree->pv[0], 1);
-        tree->evaluations = (tree->evaluations) ? tree->evaluations : 1;
-        tree->fail_highs++;
-        tree->fail_high_first_move++;
-        idle_time = 0;
-        for (i = 0; i < smp_max_threads; i++)
-          idle_time += thread[i].idle;
-        busy_percent =
-            100 - Min(100,
-            100 * idle_time / (smp_max_threads * (end_time - start_time) +
-                1));
-        Print(8, "        time=%s(%d%%)",
-            DisplayTimeKibitz(end_time - start_time), busy_percent);
-        Print(8, "  nodes=%" PRIu64 "(%s)", tree->nodes_searched,
-            DisplayKMB(tree->nodes_searched, 0));
-        Print(8, "  fh1=%d%%",
-            tree->fail_high_first_move * 100 / tree->fail_highs);
-        Print(8, "  pred=%d", predicted);
-        Print(8, "  nps=%s\n", DisplayKMB(nodes_per_second, 0));
-        Print(8, "        chk=%s", DisplayKMB(tree->extensions_done, 0));
-        Print(8, "  qchk=%s", DisplayKMB(tree->qchecks_done, 0));
-        Print(8, "  fp=%s", DisplayKMB(tree->moves_fpruned, 0));
-        Print(8, "  mcp=%s", DisplayKMB(tree->moves_mpruned, 0));
-        Print(8, "  50move=%d",
-            (ReversibleMove(last_pv.path[1]) ? Reversible(0) + 1 : 0));
-        if (tree->egtb_hits)
-          Print(8, "  egtb=%s", DisplayKMB(tree->egtb_hits, 0));
-        Print(8, "\n");
-        Print(8, "        LMReductions:");
-        npc = 21;
-        cpl = 75;
-        for (i = 1; i < 16; i++)
-          if (tree->LMR_done[i]) {
-            sprintf(buff, "%d/%s", i, DisplayKMB(tree->LMR_done[i], 0));
-            if (npc + strlen(buff) > cpl) {
-              Print(8, "\n            ");
-              npc = 12;
-            }
-            Print(8, "  %s", buff);
-            npc += strlen(buff) + 2;
+          end_time = ReadClock();
+          if (end_time > 10)
+              nodes_per_second =
+                      (uint64_t) tree->nodes_searched * 100 / Max((uint64_t) end_time -
+                                                                  start_time, 1);
+          if (abort_search != 2 && !puzzling) {
+              if (noise_block)
+                  DisplayPV(tree, 5, wtm, end_time - start_time, &tree->pv[0], 1);
+              tree->evaluations = (tree->evaluations) ? tree->evaluations : 1;
+              tree->fail_highs++;
+              tree->fail_high_first_move++;
+              idle_time = 0;
+              for (i = 0; i < smp_max_threads; i++)
+                  idle_time += thread[i].idle;
+              busy_percent =
+                      100 - Min(100,
+                                100 * idle_time / (smp_max_threads * (end_time - start_time) +
+                                                   1));
+              Print(8, "        time=%s(%d%%)",
+                    DisplayTimeKibitz(end_time - start_time), busy_percent);
+              Print(8, "  nodes=%" PRIu64 "(%s)", tree->nodes_searched,
+                    DisplayKMB(tree->nodes_searched, 0));
+              Print(8, "  fh1=%d%%",
+                    tree->fail_high_first_move * 100 / tree->fail_highs);
+              Print(8, "  pred=%d", predicted);
+              Print(8, "  nps=%s\n", DisplayKMB(nodes_per_second, 0));
+              Print(8, "        chk=%s", DisplayKMB(tree->extensions_done, 0));
+              Print(8, "  qchk=%s", DisplayKMB(tree->qchecks_done, 0));
+              Print(8, "  fp=%s", DisplayKMB(tree->moves_fpruned, 0));
+              Print(8, "  mcp=%s", DisplayKMB(tree->moves_mpruned, 0));
+              Print(8, "  50move=%d",
+                    (ReversibleMove(last_pv.path[1]) ? Reversible(0) + 1 : 0));
+              if (tree->egtb_hits)
+                  Print(8, "  egtb=%s", DisplayKMB(tree->egtb_hits, 0));
+              Print(8, "\n");
+              Print(8, "        LMReductions:");
+              npc = 21;
+              cpl = 75;
+              for (i = 1; i < 16; i++)
+                  if (tree->LMR_done[i]) {
+                      sprintf(buff, "%d/%s", i, DisplayKMB(tree->LMR_done[i], 0));
+                      if (npc + strlen(buff) > cpl) {
+                          Print(8, "\n            ");
+                          npc = 12;
+                      }
+                      Print(8, "  %s", buff);
+                      npc += strlen(buff) + 2;
+                  }
+              if (npc)
+                  Print(8, "\n");
+              npc = 24;
+              cpl = 75;
+              if (tree->null_done[null_depth])
+                  Print(8, "        null-move (R):");
+              for (i = null_depth; i < 16; i++)
+                  if (tree->null_done[i]) {
+                      sprintf(buff, "%d/%s", i, DisplayKMB(tree->null_done[i], 0));
+                      if (npc + strlen(buff) > cpl) {
+                          Print(8, "\n            ");
+                          npc = 12;
+                      }
+                      Print(8, "  %s", buff);
+                      npc += strlen(buff) + 2;
+                  }
+              if (npc)
+                  Print(8, "\n");
+              if (parallel_splits) {
+                  max = 0;
+                  for (i = 0; i < smp_max_threads; i++) {
+                      max = Max(max, PopCnt(thread[i].max_blocks));
+                      game_max_blocks |= thread[i].max_blocks;
+                  }
+                  Print(8, "        splits=%s", DisplayKMB(parallel_splits, 0));
+                  Print(8, "(%s)", DisplayKMB(parallel_splits_wasted, 0));
+                  Print(8, "  aborts=%s", DisplayKMB(parallel_aborts, 0));
+                  Print(8, "  joins=%s", DisplayKMB(parallel_joins, 0));
+                  Print(8, "  data=%d%%(%d%%)\n", 100 * max / 64,
+                        100 * PopCnt(game_max_blocks) / 64);
+              }
           }
-        if (npc)
-          Print(8, "\n");
-        npc = 24;
-        cpl = 75;
-        if (tree->null_done[null_depth])
-          Print(8, "        null-move (R):");
-        for (i = null_depth; i < 16; i++)
-          if (tree->null_done[i]) {
-            sprintf(buff, "%d/%s", i, DisplayKMB(tree->null_done[i], 0));
-            if (npc + strlen(buff) > cpl) {
-              Print(8, "\n            ");
-              npc = 12;
-            }
-            Print(8, "  %s", buff);
-            npc += strlen(buff) + 2;
-          }
-        if (npc)
-          Print(8, "\n");
-        if (parallel_splits) {
-          max = 0;
-          for (i = 0; i < smp_max_threads; i++) {
-            max = Max(max, PopCnt(thread[i].max_blocks));
-            game_max_blocks |= thread[i].max_blocks;
-          }
-          Print(8, "        splits=%s", DisplayKMB(parallel_splits, 0));
-          Print(8, "(%s)", DisplayKMB(parallel_splits_wasted, 0));
-          Print(8, "  aborts=%s", DisplayKMB(parallel_aborts, 0));
-          Print(8, "  joins=%s", DisplayKMB(parallel_joins, 0));
-          Print(8, "  data=%d%%(%d%%)\n", 100 * max / 64,
-              100 * PopCnt(game_max_blocks) / 64);
-        }
-      }
-    } while (0);
+#if defined(LAZY_DEBUG)
+          printf(" [Iterate]\tFinished displaying statistics\n");
+#endif
+      } while (0);
+#if defined(LAZY_DEBUG)
+      printf(" [Iterate]\tOut of cool while(0) loop\n");
+#endif
 /*
  ************************************************************
  *                                                          *
@@ -674,8 +703,11 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  *                                                          *
  ************************************************************
  */
-  else {
-    last_root_value = tree->pv[0].pathv;
+  } else {
+#if defined(LAZY_DEBUG)
+        printf(" [Iterate]\tPlaying book move...\n");
+#endif
+        last_root_value = tree->pv[0].pathv;
     value = tree->pv[0].pathv;
     book_move = 1;
     if (analyze_mode)
@@ -695,7 +727,10 @@ int Iterate(int wtm, int search_type, int root_list_done) {
  ************************************************************
  */
   if (smp_nice && ponder == 0 && smp_threads) {
-    int proc;
+#if defined(LAZY_DEBUG)
+      printf(" [Iterate]\tIt's time for SMP termination.\n");
+#endif
+      int proc;
 
     Print(64, "terminating SMP processes.\n");
     for (proc = 1; proc < CPUS; proc++)
@@ -703,9 +738,19 @@ int Iterate(int wtm, int search_type, int root_list_done) {
     while (smp_threads);
     smp_split = 0;
   }
+#if defined(LAZY_DEBUG)
+    printf(" [Iterate]\tThe move is ready, reading end time...\n");
+#endif
   program_end_time = ReadClock();
   search_move = 0;
-  if (quit)
-    CraftyExit(0);
+  if (quit){
+#if defined(LAZY_DEBUG)
+      printf(" [Iterate]\tQuit requested, exiting...\n");
+#endif
+      CraftyExit(0);
+  }
+#if defined(LAZY_DEBUG)
+    printf(" [Iterate]\tFinished, returning...\n");
+#endif
   return last_root_value;
 }
